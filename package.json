@@ -20,7 +20,7 @@
     }
   },
   "bin": {
-    "opencode-agentrouter": "./dist/cli.js"
+    "opencode-agentrouter": "dist/cli.js"
   },
   "files": [
     "dist",
