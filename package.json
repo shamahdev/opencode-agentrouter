@@ -4,6 +4,10 @@
     "access": "public"
   },
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shamahdev/opencode-agentrouter.git"
+  },
   "description": "AgentRouter provider plugin for OpenCode with model discovery, pricing, pacing and gateway recovery.",
   "type": "module",
   "license": "MIT",
