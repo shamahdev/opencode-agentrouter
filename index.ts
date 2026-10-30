@@ -24,7 +24,7 @@ export type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Re
 export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   "gpt-6-astra": {
     id: "gpt-6-astra",
-    name: "gpt-6-astra",
+    name: "GPT 6 Astra",
     providerType: "openai",
     api: "openai-responses",
     input: ["text", "image"],
@@ -36,7 +36,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "gpt-6.1-sol": {
     id: "gpt-6.1-sol",
-    name: "gpt-6.1-sol",
+    name: "GPT 6.1 Sol",
     providerType: "openai",
     api: "openai-responses",
     input: ["text", "image"],
@@ -48,7 +48,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "gpt-5.6-sol": {
     id: "gpt-5.6-sol",
-    name: "gpt-5.6-sol",
+    name: "GPT 5.6 Sol",
     providerType: "openai",
     api: "openai-responses",
     input: ["text", "image"],
@@ -60,7 +60,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "deepseek-v4-flash": {
     id: "deepseek-v4-flash",
-    name: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
     providerType: "openai",
     contextWindow: 1048576,
     maxTokens: 65536,
@@ -72,7 +72,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "deepseek-v4f": {
     id: "deepseek-v4f",
-    name: "deepseek-v4f",
+    name: "DeepSeek V4F",
     providerType: "openai",
     contextWindow: 1048576,
     maxTokens: 65536,
@@ -84,7 +84,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "glm-5.3": {
     id: "glm-5.3",
-    name: "glm-5.3",
+    name: "GLM 5.3",
     providerType: "openai",
     contextWindow: 1048576,
     maxTokens: 131072,
@@ -94,7 +94,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "glm-5.2": {
     id: "glm-5.2",
-    name: "glm-5.2",
+    name: "GLM 5.2",
     providerType: "openai",
     contextWindow: 1048576,
     maxTokens: 131072,
@@ -104,7 +104,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "gpt-5.5": {
     id: "gpt-5.5",
-    name: "gpt-5.5",
+    name: "GPT 5.5",
     providerType: "openai",
     contextWindow: 1048576,
     maxTokens: 131072,
@@ -114,7 +114,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "claude-opus-4-8": {
     id: "claude-opus-4-8",
-    name: "claude-opus-4-8",
+    name: "Claude Opus 4.8",
     providerType: "anthropic",
     input: ["text", "image"],
     contextWindow: 1048576,
@@ -130,7 +130,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "claude-opus-5-5": {
     id: "claude-opus-5-5",
-    name: "claude-opus-5-5",
+    name: "Claude Opus 5.5",
     providerType: "anthropic",
     input: ["text", "image"],
     contextWindow: 1000000,
@@ -146,7 +146,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "claude-opus-5": {
     id: "claude-opus-5",
-    name: "claude-opus-5",
+    name: "Claude Opus 5",
     providerType: "anthropic",
     input: ["text", "image"],
     contextWindow: 1048576,
@@ -162,7 +162,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "claude-opus-4-7": {
     id: "claude-opus-4-7",
-    name: "claude-opus-4-7",
+    name: "Claude Opus 4.7",
     providerType: "anthropic",
     input: ["text", "image"],
     contextWindow: 1048576,
@@ -178,7 +178,7 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
   },
   "claude-opus-4-6": {
     id: "claude-opus-4-6",
-    name: "claude-opus-4-6",
+    name: "Claude Opus 4.6",
     providerType: "anthropic",
     input: ["text", "image"],
     contextWindow: 1048576,
@@ -1778,8 +1778,8 @@ export function installAgentRouterFetchHook(options: TransportOptions): Fetch {
     try { const parsed = JSON.parse(text); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) source = parsed; } catch {}
     const generation = /\/(?:chat\/completions|responses|messages)$/.test(url.pathname) && source;
     const headers = new Headers(request.headers);
-    headers.set("User-Agent", getOpenCodeUserAgent());
-    if (!generation || !source) return rawFetch(new Request(request, { headers, ...(text ? { body: text } : {}) }));
+    // Preserve OpenCode/SDK headers and expose the body to the host's fetch middleware.
+    if (!generation || !source) return rawFetch(request, { headers, ...(text ? { body: text } : {}), signal });
     const protocol: Protocol = url.pathname.endsWith("/responses") ? "responses" : url.pathname.endsWith("/messages") ? "anthropic" : "chat";
     const session = headers.get("session_id") ?? headers.get("x-opencode-session") ?? source.prompt_cache_key ?? "default";
     const key = `${headers.get("authorization") ?? headers.get("x-api-key") ?? ""}:${session}`;
@@ -1799,7 +1799,7 @@ export function installAgentRouterFetchHook(options: TransportOptions): Fetch {
       if (attempt) headers.set("x-client-request-id", randomUUID());
       await pacer.enter(signal);
       let response: Response;
-      try { response = await rawFetch(new Request(request, { headers, body: JSON.stringify(body), signal })); }
+      try { response = await rawFetch(request, { headers, body: JSON.stringify(body), signal }); }
       catch (err) {
         signal.throwIfAborted();
         response = new Response(JSON.stringify({ error: { message: err instanceof Error ? err.message : String(err) } }), { status: 503, headers: { "Content-Type": "application/json" } });
@@ -2072,7 +2072,7 @@ function toModel(spec: OpenCodeModelSpec): Model.Info {
   const id = Model.ID.make(spec.id);
   const providerID = Provider.ID.make(providerFor(spec));
   return {
-    ...Model.Info.default(providerID, id), name: spec.id,
+    ...Model.Info.default(providerID, id), name: spec.name,
     package: spec.protocol === "responses" ? "aisdk:@ai-sdk/openai" : spec.protocol === "anthropic" ? "aisdk:@ai-sdk/anthropic" : "aisdk:@ai-sdk/openai-compatible",
     capabilities: { tools: true, input: spec.image ? ["text", "image"] : ["text"], output: ["text"] },
     limit: { context: spec.context, output: spec.output },
@@ -2090,7 +2090,7 @@ export default Plugin.define({
     const live = await fetchLivePricing(settings.baseURL);
     if (live) await saveCachedPricing(live, dir).catch(() => {});
     let models = toOpenCodeModelSpecs(live ?? await loadCachedPricing(dir));
-    const transport = installAgentRouterFetchHook({ ...settings, minIntervalMs: () => settings.minIntervalMs, stateDir: dir });
+    const pacer = new Pacer(dir, () => settings.minIntervalMs);
     const isOurs = (providerID: string) => Object.values(PROVIDERS).some(id => id === providerID);
     const getEffectiveApiKey = async () => {
       const env = environmentKey() || normalizeApiKey(settings.apiKey);
@@ -2119,6 +2119,7 @@ export default Plugin.define({
     await ctx.aisdk.hook("sdk", async event => {
       if (!isOurs(event.model.providerID)) return;
       const spec = models.find(m => m.id === event.model.modelID);
+      const transport = installAgentRouterFetchHook({ ...settings, minIntervalMs: () => settings.minIntervalMs, stateDir: dir, pacer, fetch: event.options.fetch });
       const options = { ...event.options, baseURL: event.options.baseURL ?? `${settings.baseURL}/v1`, apiKey: normalizeApiKey(event.options.apiKey) || await getEffectiveApiKey(), fetch: ((input, init) => transport(input, init)) as typeof transport };
       if (spec?.protocol === "responses") event.sdk = createOpenAI(options);
       else if (spec?.protocol === "anthropic") event.sdk = createAnthropic(options);
@@ -2128,11 +2129,6 @@ export default Plugin.define({
       if (!isOurs(event.model.providerID)) return;
       const protocol = models.find(m => m.id === event.model.modelID)?.protocol;
       event.language = protocol === "responses" ? event.sdk.responses(event.model.modelID) : event.sdk.languageModel(event.model.modelID);
-    });
-    await ctx.session.hook("model.request", event => {
-      if (!isOurs(event.model.providerID)) return;
-      event.headers.session_id = event.sessionID;
-      event.headers["x-opencode-session"] = event.sessionID;
     });
     for (const name of ["context", "compaction", "title", "generate"] as const) await ctx.session.hook(name, event => {
       if (!isOurs(event.model.providerID)) return;
