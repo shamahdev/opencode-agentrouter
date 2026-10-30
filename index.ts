@@ -1,4 +1,4 @@
-// MIT © madgagarin. Faithful migration of pi-agentrouter e7dc3b4 (v2.4.1).
+// MIT © madgagarin. Faithful migration of pi-agentrouter.
 
 import * as os from "node:os";
 import { mkdir, readFile, writeFile, rename, appendFile } from "node:fs/promises";
@@ -242,6 +242,13 @@ export const DECOMMISSIONED_MODELS: string[] = [
   "agentrouter-openai/glm-5.2",
   "agentrouter-openai/gpt-5.5",
 ];
+
+export const AVAILABLE_MODEL_IDS = new Set<string>([
+  "gpt-6-astra",
+  "gpt-6.1-sol",
+  "gpt-5.6-sol",
+  "claude-opus-5-5",
+]);
 
 export const DECOMMISSIONED_MODEL_IDS = new Set<string>([
   "claude-opus-5",
@@ -2016,7 +2023,6 @@ export async function manage(action: string, value?: string, options: Management
   const settings = effectiveConfig(config);
   const key = environmentKey() || normalizeApiKey(config.apiKey) || normalizeApiKey(await options.getKey?.());
   const raw = options.fetch ?? fetch;
-  if (action === "fix-order") return "Pi cache-optimizer ordering has no OpenCode equivalent; this plugin does not load pi-cache-optimizer.";
   if (action === "key") {
     const clean = normalizeApiKey(value);
     if (clean.length < 5) throw new Error("Provide a nonempty API key; prefer /connect → AgentRouter or AGENTROUTER_API_KEY");
@@ -2051,7 +2057,7 @@ export async function manage(action: string, value?: string, options: Management
   }
   if (action !== "status" && action !== "") throw new Error(`Unknown action: ${action}. Use status, check, pricing, sync, pacing or key.`);
   const usage = key ? await fetchTokenUsage(key, settings.baseURL, raw) : null;
-  return `AgentRouter for OpenCode\nEndpoint: ${settings.baseURL}\nAPI key: ${key ? "configured" : "not configured"}\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\nPacing: ${settings.minIntervalMs} ms\nMax transport retries: ${settings.maxRetries}\nCommands: status, check (uses tokens), pricing, sync, pacing <ms>\nAuthenticate with /connect → AgentRouter; model picker: /models. Pi-only fix-order and keybindings are not applicable.`;
+  return `AgentRouter for OpenCode\nEndpoint: ${settings.baseURL}\nAPI key: ${key ? "configured" : "not configured"}\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\nPacing: ${settings.minIntervalMs} ms\nMax transport retries: ${settings.maxRetries}\nCommands: /agentrouter_status, /agentrouter_pricing, /agentrouter_sync, /agentrouter_check (uses tokens), /agentrouter_pacing [ms], /agentrouter_key <key>.`;
 }
 
 export function normalizeCommandAction(action: string): string {
@@ -2073,6 +2079,7 @@ function toModel(spec: OpenCodeModelSpec): Model.Info {
   const providerID = Provider.ID.make(providerFor(spec));
   return {
     ...Model.Info.default(providerID, id), name: spec.name,
+    enabled: AVAILABLE_MODEL_IDS.has(spec.id),
     package: spec.protocol === "responses" ? "aisdk:@ai-sdk/openai" : spec.protocol === "anthropic" ? "aisdk:@ai-sdk/anthropic" : "aisdk:@ai-sdk/openai-compatible",
     capabilities: { tools: true, input: spec.image ? ["text", "image"] : ["text"], output: ["text"] },
     limit: { context: spec.context, output: spec.output },
@@ -2159,11 +2166,20 @@ export default Plugin.define({
       return report.replace("Restart OpenCode to register changes.", "Models reloaded.").replace("Restart OpenCode to apply.", "Applied to new requests.");
     };
     await ctx.command.transform(editor => {
-      editor.add({ name: "agentrouter", description: "AgentRouter status, pricing, check, sync, key <key>, pacing <ms>", async execute(input) {
-        const [action = "status", value] = input.prompt.text.trim().split(/\s+/);
-        const text = await execute(action || "status", value);
-        await ctx.session.synthetic({ sessionID: input.sessionID, text, description: "AgentRouter", resume: false, delivery: input.delivery });
-      } });
+      for (const [action, description] of [
+        ["status", "Show AgentRouter status and monthly spend"],
+        ["pricing", "Show AgentRouter model pricing and reload models"],
+        ["sync", "Refresh the AgentRouter model catalog and reload models"],
+        ["check", "Check AgentRouter model availability (uses tokens)"],
+        ["pacing", "Show request pacing or set it with a millisecond value"],
+        ["key", "Save an AgentRouter API key and reload credentials; prefer /connect"],
+      ] as const) {
+        editor.add({ name: `agentrouter_${action}`, description, async execute(input) {
+          const value = action === "pacing" || action === "key" ? input.prompt.text.trim() || undefined : undefined;
+          const text = await execute(action, value);
+          await ctx.session.synthetic({ sessionID: input.sessionID, text, description: "AgentRouter", resume: false, delivery: input.delivery });
+        } });
+      }
     });
     await ctx.tool.transform(editor => {
       editor.add({ name: "agentrouter", description: "AgentRouter status/pricing/sync. check makes real API requests and consumes tokens.", options: { codemode: false }, input: Schema.Struct({ action: Schema.Literals(["status", "pricing", "sync", "check"]) }), async execute({ action }) { return { content: await execute(action) }; } });

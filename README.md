@@ -1,6 +1,6 @@
 # @shamah/opencode-agentrouter
 
-OpenCode V2 adaptation of [madgagarin/pi-agentrouter](https://github.com/madgagarin/pi-agentrouter), based on [`e7dc3b4` (v2.4.1)](https://github.com/madgagarin/pi-agentrouter/tree/e7dc3b4bb4272e7187ea759e4a746a2814e1210f).
+OpenCode adaptation of [madgagarin/pi-agentrouter](https://github.com/madgagarin/pi-agentrouter).
 
 See original [README](https://github.com/madgagarin/pi-agentrouter/README.md). This README documents only installation and differences introduced by the adaptation.
 
@@ -39,6 +39,21 @@ Use the checkout's absolute path in your OpenCode configuration:
 
 Use `/connect` → **AgentRouter**. Both provider families share the host integration's credentials. The upstream environment variables `AGENTROUTER_API_KEY` and `AGENT_ROUTER_API_KEY` also work.
 
+## Commands
+
+Each OpenCode action has its own slash command:
+
+| Command | Description |
+|---|---|
+| `/agentrouter_status` | Show status, endpoint, monthly spend, pacing, and retries. |
+| `/agentrouter_pricing` | Show model pricing and protocols; refresh the catalog and reload models. |
+| `/agentrouter_sync` | Refresh the model catalog and reload models. |
+| `/agentrouter_check` | Check model availability and monthly spend. Makes real API requests and consumes tokens. |
+| `/agentrouter_pacing` | Show the current minimum request interval. |
+| `/agentrouter_pacing <ms>` | Set the minimum request interval in milliseconds. Applies to new requests. |
+| `/agentrouter_key <key>` | Save an API key and reload credentials. |
+
+The standalone CLI keeps its existing action syntax, e.g. `opencode-agentrouter status` or `opencode-agentrouter pacing <ms>`. Use `opencode-agentrouter --help` for usage. CLI configuration changes require restarting OpenCode.
 
 ## Configuration location
 

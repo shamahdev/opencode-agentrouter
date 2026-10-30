@@ -1,6 +1,5 @@
 This project is an independent OpenCode adaptation of:
   https://github.com/madgagarin/pi-agentrouter
-  Commit e7dc3b4bb4272e7187ea759e4a746a2814e1210f (package version 2.4.1)
   Copyright (c) 2026 madgagarin, MIT License (see LICENSE).
 
 Model metadata, pricing conversion, binary-output heuristics, gateway error
