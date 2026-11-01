@@ -1886,7 +1886,8 @@ export function sanitizeResponsesInput(input: any[]): void {
       (item.role === "assistant" && item.status === "error")) {
       input.splice(i, 1); continue;
     }
-    delete item.id;
+    // `item_reference.id` is required by the Responses API; never strip it.
+    if (item.type !== "item_reference") delete item.id;
     if (Array.isArray(item.content)) sanitizeResponsesInput(item.content);
   }
 }
@@ -2140,6 +2141,10 @@ export default Plugin.define({
     for (const name of ["context", "compaction", "title", "generate"] as const) await ctx.session.hook(name, event => {
       if (!isOurs(event.model.providerID)) return;
       event.options.promptCacheKey = event.sessionID;
+      // Stateless history: with the SDK default (store=true) prior assistant output is serialized as
+      // `item_reference` objects, which the gateway-side sanitizer cannot resolve. Must be set here,
+      // before SDK serialization; the fetch hook runs too late.
+      if (models.find(m => m.id === event.model.id)?.protocol === "responses") event.options.store = false;
       if (name === "compaction") {
         // Native OpenCode request copy: keep call IDs/names, omit argument/result dumps, preserve persisted history.
         event.messages = event.messages.map(message => ({ ...message, content: message.content.filter(part => part.type !== "reasoning").map(part =>
