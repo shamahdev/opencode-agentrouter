@@ -2114,6 +2114,8 @@ export default Plugin.define({
     });
     async function registerAgentRouterProviders() {
       await ctx.provider.transform(editor => {
+      // Hide the deprecated built-in models.dev AgentRouter catalog; the plugin registers its own live providers below.
+      editor.remove(Provider.ID.make("agentrouter"));
       for (const value of Object.values(PROVIDERS)) {
         const id = Provider.ID.make(value);
         editor.add({
