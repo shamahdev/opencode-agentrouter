@@ -512,7 +512,14 @@ export function isDeepSeekRequest(event: any, ctx: any): boolean {
 
 export const WAF_BLOCK_RE = /sensitive[_ ]words?[_ ]detected|content-blocked/i;
 
-export const SENSITIVE_WORDS_RE = /sensitive[_ ]words?[_ ]detected|content-blocked/i;
+// Host errors after a dropped or empty-failed stream: crash frames plus the transport drops that cut a stream short.
+export const STREAM_INTERRUPTED_RE = /unknown error \(no error details in response\)|upstream_cluster_crash|operation timed out|socket connection was closed unexpectedly|network connection dropped/i;
+
+// Upstream v2.5.0 waits 30s between stream recoveries and gives up after 3 strikes.
+export const STREAM_RECOVERY_DELAY_MS = 30000;
+export const STREAM_RECOVERY_ATTEMPTS = 3;
+
+export const SENSITIVE_WORDS_RE =/sensitive[_ ]words?[_ ]detected|content-blocked/i;
 
 export const REDACTED_NOTE = "[Output omitted]";
 
@@ -1349,24 +1356,19 @@ export function setHeader(headers: unknown, name: string, value: string): void {
     headers.set(name, value);
     return;
   }
+  // Set the first matching entry and drop duplicates, so the gateway sees exactly one value.
   if (Array.isArray(headers)) {
-    for (let i = 0; i < headers.length; i++) {
-      if (typeof headers[i][0] === "string" && headers[i][0].toLowerCase() === target) {
-        headers[i][1] = value;
-        return;
-      }
-    }
-    headers.push([name, value]);
+    const [first, ...duplicates] = headers.flatMap((entry, i) => typeof entry[0] === "string" && entry[0].toLowerCase() === target ? [i] : []);
+    if (first === undefined) headers.push([name, value]);
+    else headers[first][1] = value;
+    for (const i of duplicates.reverse()) headers.splice(i, 1);
     return;
   }
   if (typeof headers === "object") {
-    for (const k of Object.keys(headers)) {
-      if (k.toLowerCase() === target) {
-        (headers as Record<string, any>)[k] = value;
-        return;
-      }
-    }
-    (headers as Record<string, any>)[name] = value;
+    const record = headers as Record<string, any>;
+    const [first = name, ...duplicates] = Object.keys(record).filter(k => k.toLowerCase() === target);
+    record[first] = value;
+    for (const k of duplicates) delete record[k];
   }
 }
 
@@ -1394,21 +1396,44 @@ export function removeHeader(headers: unknown, name: string): void {
   }
 }
 
+export function patchSseResponseFailed(text: string): string {
+  if (!text.includes("response.failed") && !text.includes('"status":"failed"')) return text;
+  if (text.includes('"error":{') || text.includes('"error": {')) return text;
+  return text.replace(
+    /("status"\s*:\s*"failed")(\s*[,}])/g,
+    `$1,"error":{"code":"upstream_cluster_crash","message":"AgentRouter upstream model aborted generation mid-stream (empty error from Azure/OpenAI cluster)"}$2`
+  );
+}
+
 export function wrapStreamWithBuffer(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   buffered: Uint8Array[]
 ): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  // Patch only frames that fail without an error payload; unchanged bytes pass through untouched.
+  const patchChunk = (raw: Uint8Array): Uint8Array => {
+    try {
+      const text = decoder.decode(raw, { stream: true });
+      const patched = patchSseResponseFailed(text);
+      return patched === text ? raw : encoder.encode(patched);
+    } catch {
+      return raw;
+    }
+  };
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
       if (buffered.length > 0) {
-        controller.enqueue(buffered.shift()!);
+        controller.enqueue(patchChunk(buffered.shift()!));
         return;
       }
       const { value, done } = await reader.read();
       if (done) {
+        const tail = decoder.decode();
+        if (tail) controller.enqueue(encoder.encode(tail));
         controller.close();
       } else {
-        controller.enqueue(value);
+        controller.enqueue(patchChunk(value));
       }
     },
     cancel(reason) {
@@ -1592,8 +1617,12 @@ export async function saveConfig(config: AgentRouterConfig, file = join(configDi
   await writeJson(file, validateConfig(config));
 }
 
+// AgentRouter rejects clients it does not recognize; it accepts User-Agents starting with `opencode/`.
+export const OPENCODE_UA_PREFIX = "opencode/";
+
 export function getOpenCodeUserAgent(): string {
-  return `opencode-agentrouter (${os.platform()} ${os.release()}; ${os.arch()})`;
+  // Keep the host OS details for gateway diagnostics.
+  return `${OPENCODE_UA_PREFIX}agentrouter (${os.platform()} ${os.release()}; ${os.arch()})`;
 }
 
 export function isAgentRouterUrl(urlStr?: string, baseURL = BASE_URL): boolean {
@@ -1785,6 +1814,7 @@ export function installAgentRouterFetchHook(options: TransportOptions): Fetch {
     try { const parsed = JSON.parse(text); if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) source = parsed; } catch {}
     const generation = /\/(?:chat\/completions|responses|messages)$/.test(url.pathname) && source;
     const headers = new Headers(request.headers);
+    if (!headers.get("user-agent")?.startsWith(OPENCODE_UA_PREFIX)) headers.set("user-agent", getOpenCodeUserAgent());
     // Preserve OpenCode/SDK headers and expose the body to the host's fetch middleware.
     if (!generation || !source) return rawFetch(request, { headers, ...(text ? { body: text } : {}), signal });
     const protocol: Protocol = url.pathname.endsWith("/responses") ? "responses" : url.pathname.endsWith("/messages") ? "anthropic" : "chat";
@@ -1976,8 +2006,29 @@ export async function fetchTokenUsage(apiKey: string, baseURL = BASE_URL, fetche
     const response = await fetcher(url, { headers: { Authorization: `Bearer ${apiKey}`, "User-Agent": getOpenCodeUserAgent() } });
     if (!response.ok) return null;
     const data = await response.json() as { total_usage?: unknown };
-    return typeof data.total_usage === "number" && Number.isFinite(data.total_usage) ? data.total_usage : null;
+    return typeof data.total_usage === "number" && Number.isFinite(data.total_usage) ? data.total_usage / QUOTA_UNITS_PER_USD : null;
   } catch { return null; }
+}
+// New-API / One-API reports usage in quota units, not dollars.
+export const QUOTA_UNITS_PER_USD = 500000;
+// Beijing hours at which each model's AgentRouter quota refreshes.
+export const QUOTA_REFRESH_HOURS_BEIJING: Record<string, number[]> = { "gpt-6-astra": [3, 15], "claude-opus-5-5": [9] };
+export function formatQuotaSchedule(): string {
+  const refreshes = Object.entries(QUOTA_REFRESH_HOURS_BEIJING).map(([model, hours]) =>
+    `  • ${model}: next quota drop in ~${getBeijingCountdown(hours)} (${hours.map(h => `${String(h).padStart(2, "0")}:00`).join(" / ")} Beijing)`);
+  return ["Schedule & quotas:", "  • gpt-6.1-sol: 24/7 unlimited availability (recommended fallback)", ...refreshes].join("\n");
+}
+export function getBeijingCountdown(targetHours: number[]): string {
+  const now = new Date();
+  const beijing = new Date(now.getTime() + 8 * 3600 * 1000);
+  const currentMinutes = beijing.getUTCHours() * 60 + beijing.getUTCMinutes();
+  let minDiff = Infinity;
+  for (const hour of targetHours) {
+    let diff = hour * 60 - currentMinutes;
+    if (diff <= 0) diff += 24 * 60;
+    if (diff < minDiff) minDiff = diff;
+  }
+  return `${Math.floor(minDiff / 60)}h ${minDiff % 60}m`;
 }
 export interface ModelProbeResult { model: string; status: "READY" | "QUOTA_EXHAUSTED" | "NOT_IN_TOKEN" | "FORBIDDEN" | "ERROR"; code: number; message?: string }
 export async function probeModelQuota(modelId: string, apiKey: string, isAnthropic: boolean, isResponsesApi?: boolean, baseURL = BASE_URL, fetcher: Fetch = fetch): Promise<ModelProbeResult> {
@@ -2054,7 +2105,7 @@ export async function manage(action: string, value?: string, options: Management
       fetchTokenUsage(key, settings.baseURL, raw),
       Promise.all(probeModels.map(model => probeModelQuota(model.id, key, model.protocol === "anthropic", model.protocol === "responses", settings.baseURL, transport))),
     ]);
-    return `AgentRouter health (probes use tokens)\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\n${probes.map(p => `${p.model}: ${p.status} (HTTP ${p.code})${p.message ? ` — ${p.message}` : ""}`).join("\n")}`;
+    return `AgentRouter health (probes use tokens)\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\n${probes.map(p => `${p.model}: ${p.status} (HTTP ${p.code})${p.message ? ` — ${p.message}` : ""}`).join("\n")}\n\n${formatQuotaSchedule()}`;
   }
   if (action !== "status" && action !== "") throw new Error(`Unknown action: ${action}. Use status, check, pricing, sync, pacing or key.`);
   const usage = key ? await fetchTokenUsage(key, settings.baseURL, raw) : null;
@@ -2155,6 +2206,11 @@ export default Plugin.define({
           part.type === "text" ? { ...part, text: sanitizeCompactionText(cleanContent(part.text)) } : part) }));
       }
       if (!event.system[0]?.text.startsWith(CANONICAL_OPENCODE_HEADER)) event.system.unshift({ type: "text", text: CANONICAL_OPENCODE_HEADER });
+    });
+    await ctx.session.hook("retry", event => {
+      if (!isOurs(event.model.providerID) || !STREAM_INTERRUPTED_RE.test(event.error.message)) return;
+      // Upstream resumes a dropped stream after 30s, up to 3 attempts; past that the host's decision stands.
+      if (event.attempt < STREAM_RECOVERY_ATTEMPTS) event.decision = { retry: true, delay: STREAM_RECOVERY_DELAY_MS };
     });
     const execute = async (action: string, value?: string) => {
       action = normalizeCommandAction(action);
