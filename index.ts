@@ -46,6 +46,30 @@ export const KNOWN_MODEL_SPECS: Record<string, ModelSpec> = {
     compat: { sendSessionAffinityHeaders: false },
     cost: { input: 3.0 / 1_000_000, output: 15.0 / 1_000_000, cacheRead: 0, cacheWrite: 0 },
   },
+  "gpt-6.2-astra": {
+    id: "gpt-6.2-astra",
+    name: "GPT 6.2 Astra",
+    providerType: "openai",
+    api: "openai-responses",
+    input: ["text", "image"],
+    contextWindow: 1048576,
+    maxTokens: 131072,
+    reasoning: true,
+    compat: { sendSessionAffinityHeaders: false },
+    cost: { input: 10.0 / 1_000_000, output: 50.0 / 1_000_000, cacheRead: 0, cacheWrite: 0 },
+  },
+  "gpt-6.2-sol": {
+    id: "gpt-6.2-sol",
+    name: "GPT 6.2 Sol",
+    providerType: "openai",
+    api: "openai-responses",
+    input: ["text", "image"],
+    contextWindow: 1050000,
+    maxTokens: 128000,
+    reasoning: true,
+    compat: { sendSessionAffinityHeaders: false },
+    cost: { input: 7.0 / 1_000_000, output: 35.0 / 1_000_000, cacheRead: 0, cacheWrite: 0 },
+  },
   "gpt-5.6-sol": {
     id: "gpt-5.6-sol",
     name: "GPT 5.6 Sol",
@@ -227,13 +251,15 @@ export interface ApiPricingModel {
 
 export const FLAGSHIP_MODELS: string[] = [
   "agentrouter-openai/deepseek-v4-flash",
-  "agentrouter-openai/gpt-6-astra",
   "agentrouter-openai/gpt-6.1-sol",
+  "agentrouter-openai/gpt-6.2-astra",
+  "agentrouter-openai/gpt-6.2-sol",
   "agentrouter-openai/gpt-5.6-sol",
   "agentrouter-clode/claude-opus-5-5",
 ];
 
 export const DECOMMISSIONED_MODELS: string[] = [
+  "agentrouter-openai/gpt-6-astra",
   "agentrouter-clode/claude-opus-5",
   "agentrouter-clode/claude-opus-4-8",
   "agentrouter-clode/claude-opus-4-7",
@@ -244,13 +270,15 @@ export const DECOMMISSIONED_MODELS: string[] = [
 ];
 
 export const AVAILABLE_MODEL_IDS = new Set<string>([
-  "gpt-6-astra",
   "gpt-6.1-sol",
+  "gpt-6.2-astra",
+  "gpt-6.2-sol",
   "gpt-5.6-sol",
   "claude-opus-5-5",
 ]);
 
 export const DECOMMISSIONED_MODEL_IDS = new Set<string>([
+  "gpt-6-astra",
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-opus-4-7",
