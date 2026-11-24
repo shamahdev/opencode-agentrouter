@@ -1736,14 +1736,15 @@ export function classifyFailure(status: number, text: string, attempt = 0): Fail
   // Never retry authentication/authorization or exhausted quota except upstream's explicit transient token-cache error.
   if (status === 402 || status === 403) return null;
   if (status === 401) return attempt < 2 && (text.includes("无效的令牌") || (s.includes("new_api_error") && s.includes("token"))) ? "auth" : null;
-  if (status === 429 || /rate[_ ]limit|tokens per minute|token rate limit|tpm|rpm/.test(s)) return "rate";
   if (WAF_BLOCK_RE.test(s)) return "waf";
   if (/different azure.*resource|use the same resource|could not be decrypted|decryption[_ ]failure|encrypted content|cross[-_ ]resource|cross resource|cross-origin/.test(s)) return "cluster";
   if (status === 400 && /reasoning_content|content\[\]\.thinking|thinking mode must be passed back/.test(s)) return "thinking";
-  if (status === 422 || /failed to deserialize|unknown variant|expected one of `text`/.test(s)) return "schema";
+  if (/failed to deserialize|unknown variant|expected one of `text`/.test(s)) return "schema";
   if (status === 400 && /tool_result.*tool_use|unexpected.*tool_use_id/.test(s)) return "pairing";
   if (status === 405 || (status === 400 && s.includes("blocked"))) return "challenge";
-  if ([502, 503, 504].includes(status) || (status === 500 && s.includes("temporarily unavailable"))) return "service";
+  if (/invalid_request_error|rejected the request as invalid/.test(s)) return null;
+  if (status === 429 || /rate[_ ]limit|tokens per minute|token rate limit|tpm|rpm|too_many_requests|overloaded|experiencing high demand|exceeds the maximum usage size allowed during peak load/.test(s)) return "rate";
+  if (s.includes("failed before output") || [502, 503, 504].includes(status) || (status === 500 && s.includes("temporarily unavailable"))) return "service";
   return null;
 }
 export function retryDelay(failure: Failure, attempt: number, headers: Headers, text: string, pacing: number, now = Date.now(), random = Math.random): number {
