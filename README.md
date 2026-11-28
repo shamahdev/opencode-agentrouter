@@ -13,7 +13,7 @@ Add `@shamah/opencode-agentrouter` to your plugin list in `~/.config/opencode/op
 ```json
 {
   "plugins": ["@shamah/opencode-agentrouter"],
-  "model": "agentrouter-openai/gpt-6.1-sol"
+  "model": "agentrouter-openai/gpt-6.2-sol"
 }
 ```
 
@@ -31,7 +31,7 @@ Use the checkout's absolute path in your OpenCode configuration:
 ```json
 {
   "plugins": ["/absolute/path/to/opencode-agentrouter"],
-  "model": "agentrouter-openai/gpt-6.1-sol"
+  "model": "agentrouter-openai/gpt-6.2-sol"
 }
 ```
 

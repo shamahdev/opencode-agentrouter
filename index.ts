@@ -251,7 +251,6 @@ export interface ApiPricingModel {
 
 export const FLAGSHIP_MODELS: string[] = [
   "agentrouter-openai/deepseek-v4-flash",
-  "agentrouter-openai/gpt-6.1-sol",
   "agentrouter-openai/gpt-6.2-astra",
   "agentrouter-openai/gpt-6.2-sol",
   "agentrouter-openai/gpt-5.6-sol",
@@ -259,6 +258,7 @@ export const FLAGSHIP_MODELS: string[] = [
 ];
 
 export const DECOMMISSIONED_MODELS: string[] = [
+  "agentrouter-openai/gpt-6.1-sol",
   "agentrouter-openai/gpt-6-astra",
   "agentrouter-clode/claude-opus-5",
   "agentrouter-clode/claude-opus-4-8",
@@ -270,7 +270,6 @@ export const DECOMMISSIONED_MODELS: string[] = [
 ];
 
 export const AVAILABLE_MODEL_IDS = new Set<string>([
-  "gpt-6.1-sol",
   "gpt-6.2-astra",
   "gpt-6.2-sol",
   "gpt-5.6-sol",
@@ -278,6 +277,7 @@ export const AVAILABLE_MODEL_IDS = new Set<string>([
 ]);
 
 export const DECOMMISSIONED_MODEL_IDS = new Set<string>([
+  "gpt-6.1-sol",
   "gpt-6-astra",
   "claude-opus-5",
   "claude-opus-4-8",
@@ -2045,7 +2045,7 @@ export const QUOTA_REFRESH_HOURS_BEIJING: Record<string, number[]> = { "gpt-6-as
 export function formatQuotaSchedule(): string {
   const refreshes = Object.entries(QUOTA_REFRESH_HOURS_BEIJING).map(([model, hours]) =>
     `  • ${model}: next quota drop in ~${getBeijingCountdown(hours)} (${hours.map(h => `${String(h).padStart(2, "0")}:00`).join(" / ")} Beijing)`);
-  return ["Schedule & quotas:", "  • gpt-6.1-sol: 24/7 unlimited availability (recommended fallback)", ...refreshes].join("\n");
+  return ["Schedule & quotas:", ...refreshes].join("\n");
 }
 export function getBeijingCountdown(targetHours: number[]): string {
   const now = new Date();
