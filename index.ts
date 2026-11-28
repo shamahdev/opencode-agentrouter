@@ -253,13 +253,13 @@ export const FLAGSHIP_MODELS: string[] = [
   "agentrouter-openai/deepseek-v4-flash",
   "agentrouter-openai/gpt-6.2-astra",
   "agentrouter-openai/gpt-6.2-sol",
-  "agentrouter-openai/gpt-5.6-sol",
-  "agentrouter-clode/claude-opus-5-5",
 ];
 
 export const DECOMMISSIONED_MODELS: string[] = [
   "agentrouter-openai/gpt-6.1-sol",
   "agentrouter-openai/gpt-6-astra",
+  "agentrouter-openai/gpt-5.6-sol",
+  "agentrouter-clode/claude-opus-5-5",
   "agentrouter-clode/claude-opus-5",
   "agentrouter-clode/claude-opus-4-8",
   "agentrouter-clode/claude-opus-4-7",
@@ -272,13 +272,13 @@ export const DECOMMISSIONED_MODELS: string[] = [
 export const AVAILABLE_MODEL_IDS = new Set<string>([
   "gpt-6.2-astra",
   "gpt-6.2-sol",
-  "gpt-5.6-sol",
-  "claude-opus-5-5",
 ]);
 
 export const DECOMMISSIONED_MODEL_IDS = new Set<string>([
   "gpt-6.1-sol",
   "gpt-6-astra",
+  "gpt-5.6-sol",
+  "claude-opus-5-5",
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-opus-4-7",
@@ -2041,11 +2041,13 @@ export async function fetchTokenUsage(apiKey: string, baseURL = BASE_URL, fetche
 // New-API / One-API reports usage in quota units, not dollars.
 export const QUOTA_UNITS_PER_USD = 500000;
 // Beijing hours at which each model's AgentRouter quota refreshes.
-export const QUOTA_REFRESH_HOURS_BEIJING: Record<string, number[]> = { "gpt-6-astra": [3, 15], "claude-opus-5-5": [9] };
+export const QUOTA_REFRESH_HOURS_BEIJING: Record<string, number[]> = {};
 export function formatQuotaSchedule(): string {
-  const refreshes = Object.entries(QUOTA_REFRESH_HOURS_BEIJING).map(([model, hours]) =>
-    `  • ${model}: next quota drop in ~${getBeijingCountdown(hours)} (${hours.map(h => `${String(h).padStart(2, "0")}:00`).join(" / ")} Beijing)`);
-  return ["Schedule & quotas:", ...refreshes].join("\n");
+  const refreshes = Object.entries(QUOTA_REFRESH_HOURS_BEIJING)
+    .filter(([model]) => !DECOMMISSIONED_MODEL_IDS.has(model))
+    .map(([model, hours]) =>
+      `  • ${model}: next quota drop in ~${getBeijingCountdown(hours)} (${hours.map(h => `${String(h).padStart(2, "0")}:00`).join(" / ")} Beijing)`);
+  return refreshes.length ? ["Schedule & quotas:", ...refreshes].join("\n") : "";
 }
 export function getBeijingCountdown(targetHours: number[]): string {
   const now = new Date();
@@ -2134,7 +2136,8 @@ export async function manage(action: string, value?: string, options: Management
       fetchTokenUsage(key, settings.baseURL, raw),
       Promise.all(probeModels.map(model => probeModelQuota(model.id, key, model.protocol === "anthropic", model.protocol === "responses", settings.baseURL, transport))),
     ]);
-    return `AgentRouter health (probes use tokens)\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\n${probes.map(p => `${p.model}: ${p.status} (HTTP ${p.code})${p.message ? ` — ${p.message}` : ""}`).join("\n")}\n\n${formatQuotaSchedule()}`;
+    const schedule = formatQuotaSchedule();
+    return `AgentRouter health (probes use tokens)\nMonthly spend: ${usage === null ? "unavailable" : `$${usage.toFixed(4)}`}\n${probes.map(p => `${p.model}: ${p.status} (HTTP ${p.code})${p.message ? ` — ${p.message}` : ""}`).join("\n")}${schedule ? `\n\n${schedule}` : ""}`;
   }
   if (action !== "status" && action !== "") throw new Error(`Unknown action: ${action}. Use status, check, pricing, sync, pacing or key.`);
   const usage = key ? await fetchTokenUsage(key, settings.baseURL, raw) : null;
